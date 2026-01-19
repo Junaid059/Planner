@@ -1,0 +1,205 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7
+    container_name: studyflow-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:-studyflow}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-studyflow_secret}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-studyflow}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - studyflow-network
+
+  # Redis for caching and sessions
+  redis:
+    image: redis:7-alpine
+    container_name: studyflow-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - studyflow-network
+
+  # Frontend - Next.js Application
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: studyflow-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://${MONGO_USERNAME:-studyflow}:${MONGO_PASSWORD:-studyflow_secret}@mongodb:27017/${MONGO_DATABASE:-studyflow}?authSource=admin
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ADMIN_SETUP_KEY=${ADMIN_SETUP_KEY:-studyflow_admin_setup_2024}
+      - NEXT_PUBLIC_API_URL=http://localhost:3000
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - studyflow-network
+
+  # Auth Microservice
+  auth-service:
+    build:
+      context: .
+      dockerfile: src/app/api/auth/Dockerfile
+    container_name: studyflow-auth
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://${MONGO_USERNAME:-studyflow}:${MONGO_PASSWORD:-studyflow_secret}@mongodb:27017/${MONGO_DATABASE:-studyflow}?authSource=admin
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - studyflow-network
+
+  # Plans Microservice
+  plans-service:
+    build:
+      context: .
+      dockerfile: src/app/api/plans/Dockerfile
+    container_name: studyflow-plans
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    environment:
+      - PORT=3002
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://${MONGO_USERNAME:-studyflow}:${MONGO_PASSWORD:-studyflow_secret}@mongodb:27017/${MONGO_DATABASE:-studyflow}?authSource=admin
+      - JWT_SECRET=${JWT_SECRET}
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - studyflow-network
+
+  # Tasks Microservice
+  tasks-service:
+    build:
+      context: .
+      dockerfile: src/app/api/tasks/Dockerfile
+    container_name: studyflow-tasks
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+    environment:
+      - PORT=3003
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://${MONGO_USERNAME:-studyflow}:${MONGO_PASSWORD:-studyflow_secret}@mongodb:27017/${MONGO_DATABASE:-studyflow}?authSource=admin
+      - JWT_SECRET=${JWT_SECRET}
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - studyflow-network
+
+  # Timer Microservice
+  timer-service:
+    build:
+      context: .
+      dockerfile: src/app/api/timer/Dockerfile
+    container_name: studyflow-timer
+    restart: unless-stopped
+    ports:
+      - "3004:3004"
+    environment:
+      - PORT=3004
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://${MONGO_USERNAME:-studyflow}:${MONGO_PASSWORD:-studyflow_secret}@mongodb:27017/${MONGO_DATABASE:-studyflow}?authSource=admin
+      - JWT_SECRET=${JWT_SECRET}
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - studyflow-network
+
+  # Analytics Microservice
+  analytics-service:
+    build:
+      context: .
+      dockerfile: src/app/api/analytics/Dockerfile
+    container_name: studyflow-analytics
+    restart: unless-stopped
+    ports:
+      - "3005:3005"
+    environment:
+      - PORT=3005
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://${MONGO_USERNAME:-studyflow}:${MONGO_PASSWORD:-studyflow_secret}@mongodb:27017/${MONGO_DATABASE:-studyflow}?authSource=admin
+      - JWT_SECRET=${JWT_SECRET}
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - studyflow-network
+
+  # AI Microservice
+  ai-service:
+    build:
+      context: .
+      dockerfile: src/app/api/ai/Dockerfile
+    container_name: studyflow-ai
+    restart: unless-stopped
+    ports:
+      - "3006:3006"
+    environment:
+      - PORT=3006
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://${MONGO_USERNAME:-studyflow}:${MONGO_PASSWORD:-studyflow_secret}@mongodb:27017/${MONGO_DATABASE:-studyflow}?authSource=admin
+      - JWT_SECRET=${JWT_SECRET}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - studyflow-network
+
+networks:
+  studyflow-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+  redis_data:
